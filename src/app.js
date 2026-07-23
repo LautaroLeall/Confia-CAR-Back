@@ -39,9 +39,9 @@ app.use((err, req, res, next) => {
     const message = process.env.NODE_ENV === 'production'
         ? 'Error interno del servidor'
         : err.message || 'Error interno del servidor';
-    
+
     console.error(`[Error] ${err.stack || err.message}`);
-    
+
     res.status(status).json({ message });
 });
 

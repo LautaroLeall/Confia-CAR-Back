@@ -187,7 +187,7 @@ export const updateProfile = async (req, res) => {
             user.firstName = req.body.firstName || user.firstName;
             user.lastName = req.body.lastName || user.lastName;
             user.avatar = req.body.avatar || user.avatar;
-            
+
             // Si intenta actualizar contraseña
             if (req.body.password) {
                 if (req.body.password.length < 6) {
