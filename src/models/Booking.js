@@ -30,7 +30,7 @@ const bookingSchema = new mongoose.Schema(
         },
         status: {
             type: String,
-            enum: ['pending_approval', 'confirmed', 'cancelled', 'paid', 'active', 'completed', 'expired'],
+            enum: ['pending_approval', 'confirmed', 'cancelled', 'paid', 'picked_up', 'active', 'completed', 'expired'],
             default: 'pending_approval'
         },
         paymentStatus: {
@@ -56,6 +56,8 @@ const bookingSchema = new mongoose.Schema(
         cancelledAt: { type: Date, default: null },
         confirmedAt: { type: Date, default: null },
         paidAt: { type: Date, default: null },
+        pickedUpAt: { type: Date, default: null },
+        returnedAt: { type: Date, default: null },
         chatOpen: { type: Boolean, default: true }
     },
     {
