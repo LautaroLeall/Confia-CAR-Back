@@ -1,5 +1,21 @@
+import mongoose from 'mongoose';
 import Car from '../models/Car.js';
 import Booking from '../models/Booking.js';
+
+// Helper para buscar un auto tanto por MongoDB _id como por su id numérico (evita el bug de parseInt('6a4e...'))
+const findCarByIdOrObjectId = async (id) => {
+    let car = null;
+    if (mongoose.Types.ObjectId.isValid(id)) {
+        car = await Car.findById(id);
+    }
+    if (!car && /^\d+$/.test(String(id))) {
+        car = await Car.findOne({ id: parseInt(id, 10) });
+    }
+    if (!car) {
+        car = await Car.findOne({ id: id });
+    }
+    return car;
+};
 
 // @desc    Obtener todos los autos (con filtro opcional de ubicación)
 // @route   GET /api/cars
@@ -12,10 +28,9 @@ export const getCars = async (req, res) => {
             query.location = { $regex: new RegExp(location, 'i') };
         }
 
-        // Si se pasan fechas, filtramos los autos ocupados
         if (pickUpDate && dropOffDate) {
             const overlappingBookings = await Booking.find({
-                status: { $in: ['confirmed', 'paid', 'active'] },
+                status: { $in: ['confirmed', 'paid', 'picked_up', 'active'] },
                 $or: [
                     { pickUpDate: { $lte: new Date(dropOffDate) }, dropOffDate: { $gte: new Date(pickUpDate) } }
                 ]
@@ -24,31 +39,44 @@ export const getCars = async (req, res) => {
             query._id = { $nin: busyCarIds };
         }
 
-        const cars = await Car.find(query);
-        res.json(cars);
+        const cars = await Car.find(query).lean();
+
+        // Obtener reservas activas/confirmadas/pagadas/retiradas para adjuntar fechas ocupadas
+        const activeBookings = await Booking.find({
+            status: { $in: ['confirmed', 'paid', 'picked_up', 'active'] },
+            dropOffDate: { $gte: new Date() }
+        }).select('car pickUpDate dropOffDate status');
+
+        const carsWithBookings = cars.map(car => {
+            const carBookings = activeBookings.filter(b => b.car.toString() === car._id.toString());
+            return {
+                ...car,
+                activeBookings: carBookings
+            };
+        });
+
+        res.json(carsWithBookings);
     } catch (error) {
         console.error('Error al obtener autos:', error);
         res.status(500).json({ message: 'Error al obtener los autos' });
     }
 };
 
-// @desc    Obtener un auto por su ID numérico
+// @desc    Obtener un auto por su ID (ObjectId o numérico)
 // @route   GET /api/cars/:id
 // @access  Public
 export const getCarById = async (req, res) => {
     const { id } = req.params;
     try {
-        // Buscamos por el ID numérico compatible con el ruteo del frontend
-        const car = await Car.findOne({ id: parseInt(id) });
+        const car = await findCarByIdOrObjectId(id);
         if (!car) {
             return res.status(404).json({ message: 'Auto no encontrado' });
         }
 
-        // Buscar reservas activas para este auto (para deshabilitar fechas en el frontend)
         const activeBookings = await Booking.find({
             car: car._id,
-            status: { $in: ['confirmed', 'paid', 'active'] },
-            dropOffDate: { $gte: new Date() } // Solo reservas futuras o actuales
+            status: { $in: ['confirmed', 'paid', 'picked_up', 'active'] },
+            dropOffDate: { $gte: new Date() }
         }).select('pickUpDate dropOffDate status');
 
         res.json({ ...car.toObject(), activeBookings });
@@ -62,17 +90,19 @@ export const getCarById = async (req, res) => {
 // @route   POST /api/cars
 // @access  Private/Admin
 export const createCar = async (req, res) => {
-    const { id, name, type, year, seats, fuel, transmission, location, price, description, image } = req.body;
+    const { name, type, year, seats, fuel, transmission, location, price, description, image } = req.body;
 
-    if (!id || !name || !type || !year || !seats || !fuel || !transmission || !location || !price || !description || !image) {
+    if (!name || !type || !year || !seats || !fuel || !transmission || !location || !price || !description || !image) {
         return res.status(400).json({ message: 'Todos los campos son obligatorios' });
     }
 
     try {
-        const carExists = await Car.findOne({ id: parseInt(id) });
-        if (carExists) {
-            return res.status(400).json({ message: `Ya existe un auto con el ID numérico ${id}` });
+        let numericId = req.body.id;
+        if (!numericId) {
+            const lastCar = await Car.findOne({}).sort({ id: -1 });
+            numericId = (lastCar && lastCar.id && !isNaN(lastCar.id)) ? lastCar.id + 1 : Date.now();
         }
+        req.body.id = numericId;
 
         const car = await Car.create(req.body);
         res.status(201).json(car);
@@ -88,12 +118,11 @@ export const createCar = async (req, res) => {
 export const updateCar = async (req, res) => {
     const { id } = req.params;
     try {
-        const car = await Car.findOne({ id: parseInt(id) });
+        const car = await findCarByIdOrObjectId(id);
         if (!car) {
             return res.status(404).json({ message: 'Auto no encontrado' });
         }
 
-        // Actualizar campos
         Object.assign(car, req.body);
         const updatedCar = await car.save();
         res.json(updatedCar);
@@ -109,7 +138,7 @@ export const updateCar = async (req, res) => {
 export const deleteCar = async (req, res) => {
     const { id } = req.params;
     try {
-        const car = await Car.findOne({ id: parseInt(id) });
+        const car = await findCarByIdOrObjectId(id);
         if (!car) {
             return res.status(404).json({ message: 'Auto no encontrado' });
         }
