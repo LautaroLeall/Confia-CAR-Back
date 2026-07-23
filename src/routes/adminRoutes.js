@@ -1,14 +1,16 @@
 import express from 'express';
 import { protect, admin } from '../middleware/authMiddleware.js';
-import { 
-    getDashboardStats, 
-    getAllBookings, 
-    confirmBooking, 
-    cancelBooking, 
-    completeBooking, 
-    getAllUsers, 
-    updateUserRole, 
-    deleteUser 
+import {
+    getDashboardStats,
+    getAllBookings,
+    confirmBooking,
+    markAsPaid,
+    pickupBooking,
+    cancelBooking,
+    completeBooking,
+    getAllUsers,
+    updateUserRole,
+    deleteUser
 } from '../controllers/adminController.js';
 
 const router = express.Router();
@@ -22,6 +24,8 @@ router.get('/dashboard', getDashboardStats);
 // Bookings (Gestión)
 router.get('/bookings', getAllBookings);
 router.put('/bookings/:id/confirm', confirmBooking);
+router.put('/bookings/:id/pay', markAsPaid);
+router.put('/bookings/:id/pickup', pickupBooking);
 router.put('/bookings/:id/cancel', cancelBooking);
 router.put('/bookings/:id/complete', completeBooking);
 
