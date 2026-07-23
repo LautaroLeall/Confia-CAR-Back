@@ -4,19 +4,23 @@ import { protect } from '../middleware/authMiddleware.js';
 
 const router = express.Router();
 
-// Crear reserva / Cancelar reserva
+// Crear reserva
 router.route('/')
     .post(protect, createBooking);
 
 // Mercado Pago
 router.post('/mp-preference', protect, createMPPreference);
-router.post('/webhook', mpWebhook); // Público para recibir notificaciones de Mercado Pago
+router.post('/webhook', mpWebhook);
 
-// Listados por usuario
+// Listados por usuario — DEBEN ir ANTES de /:id para no ser capturadas
+router.get('/my', protect, getMyBookings);   // alias para el frontend
 router.get('/my-bookings', protect, getMyBookings);
 router.get('/my-payments', protect, getMyPayments);
 
-// Rutas con parámetros
+// Alias PUT para cancelar (compatible con frontend)
+router.put('/:id/cancel', protect, deleteBooking);
+
+// Rutas con parámetros — SIEMPRE AL FINAL
 router.route('/:id')
     .get(protect, getBookingById)
     .delete(protect, deleteBooking);
