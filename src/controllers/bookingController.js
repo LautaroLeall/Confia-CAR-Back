@@ -1,3 +1,4 @@
+import mongoose from 'mongoose';
 import { Preference, Payment } from 'mercadopago';
 import mpClient from '../config/mercadopago.js';
 import Booking from '../models/Booking.js';
@@ -23,8 +24,14 @@ export const createBooking = async (req, res) => {
     }
 
     try {
-        // Buscar el auto en la BD por su ID numérico
-        const car = await Car.findOne({ id: parseInt(carId) });
+        // Buscar el auto en la BD por ObjectId o ID numérico
+        let car = null;
+        if (mongoose.Types.ObjectId.isValid(carId)) {
+            car = await Car.findById(carId);
+        }
+        if (!car && /^\d+$/.test(String(carId))) {
+            car = await Car.findOne({ id: parseInt(carId, 10) });
+        }
         if (!car) {
             return res.status(404).json({ message: 'Vehículo no encontrado' });
         }
@@ -46,16 +53,26 @@ export const createBooking = async (req, res) => {
         const days = calculateRentalDays(pickUpDate, dropOffDate);
         const totalPrice = days * car.price;
 
+        // Parsear fechas a mediodía UTC (12:00) para evitar desfasaje de zona horaria (UTC-3)
+        const parseDateStringUTC = (str) => {
+            if (!str) return new Date();
+            const dateStr = typeof str === 'string' ? str.split('T')[0] : '';
+            if (dateStr.length === 10) {
+                return new Date(`${dateStr}T12:00:00.000Z`);
+            }
+            return new Date(str);
+        };
+
         const booking = await Booking.create({
             car: car._id,
             user: req.user._id,
-            pickUpDate,
-            dropOffDate,
+            pickUpDate: parseDateStringUTC(pickUpDate),
+            dropOffDate: parseDateStringUTC(dropOffDate),
             location,
             totalPrice,
             status: 'pending_approval',
             paymentStatus: 'pending',
-            chatOpen: true
+            chatOpen: false
         });
 
         // Retornar la reserva creada poblada con datos del auto
@@ -96,28 +113,35 @@ export const createMPPreference = async (req, res) => {
 
         const preferenceClient = new Preference(mpClient);
 
-        const days = calculateRentalDays(booking.pickUpDate, booking.dropOffDate);
+        let frontendUrl = process.env.FRONTEND_URL || 'http://localhost:5174';
+        if (frontendUrl.endsWith('/')) {
+            frontendUrl = frontendUrl.slice(0, -1);
+        }
 
-        // Armar el cuerpo de la preferencia
         const preferenceBody = {
             items: [
                 {
-                    id: booking.car.id.toString(),
-                    title: `Alquiler de ${booking.car.name}`,
-                    description: `Alquiler por ${days} día(s) en ${booking.location}. Retiro: ${booking.pickUpDate}, Entrega: ${booking.dropOffDate}`,
+                    id: (booking.car?.id || booking.car?._id || '1').toString(),
+                    title: `Alquiler de ${booking.car?.name || 'Auto'}`,
                     quantity: 1,
                     unit_price: Number(booking.totalPrice),
                     currency_id: 'ARS',
                 }
             ],
             back_urls: {
-                success: `${process.env.FRONTEND_URL}/myBookings?status=success`,
-                failure: `${process.env.FRONTEND_URL}/myBookings?status=failure`,
-                pending: `${process.env.FRONTEND_URL}/myBookings?status=pending`,
+                success: `${frontendUrl}/mireservas?status=success`,
+                failure: `${frontendUrl}/mireservas?status=failure`,
+                pending: `${frontendUrl}/mireservas?status=pending`
             },
-            auto_return: 'approved',
-            external_reference: booking._id.toString(),
+            external_reference: booking._id.toString()
         };
+
+        // Mercado Pago exige que back_urls sea HTTPS para permitir auto_return
+        if (frontendUrl.startsWith('https')) {
+            preferenceBody.auto_return = 'approved';
+        }
+
+        console.log('--- ENVIANDO PREFERENCE MP ---', JSON.stringify(preferenceBody, null, 2));
 
         // Si tenemos url de backend externa configurada para webhooks, la agregamos
         if (process.env.BACKEND_URL) {
@@ -197,15 +221,14 @@ export const mpWebhook = async (req, res) => {
     }
 };
 
-// @desc    Obtener reservas pendientes del usuario autenticado
+// @desc    Obtener todas las reservas del usuario autenticado
 // @route   GET /api/bookings/my-bookings
 // @access  Private
 export const getMyBookings = async (req, res) => {
     try {
         const bookings = await Booking.find({
-            user: req.user._id,
-            paymentStatus: { $ne: 'approved' } // Pendientes o rechazadas
-        }).populate('car');
+            user: req.user._id
+        }).populate('car').sort({ createdAt: -1 });
 
         res.json(bookings);
     } catch (error) {
@@ -221,8 +244,11 @@ export const getMyPayments = async (req, res) => {
     try {
         const payments = await Booking.find({
             user: req.user._id,
-            paymentStatus: 'approved'
-        }).populate('car');
+            $or: [
+                { paymentStatus: 'approved' },
+                { status: { $in: ['paid', 'active', 'completed'] } }
+            ]
+        }).populate('car').sort({ createdAt: -1 });
 
         res.json(payments);
     } catch (error) {
@@ -237,7 +263,7 @@ export const getMyPayments = async (req, res) => {
 export const getBookingById = async (req, res) => {
     try {
         const booking = await Booking.findById(req.params.id).populate('car').populate('user', 'firstName lastName email');
-        
+
         if (!booking) {
             return res.status(404).json({ message: 'Reserva no encontrada' });
         }
@@ -280,7 +306,7 @@ export const deleteBooking = async (req, res) => {
         booking.cancelledBy = 'user';
         booking.cancelledAt = new Date();
         booking.chatOpen = false;
-        
+
         await booking.save();
         res.json({ message: 'Reserva cancelada con éxito' });
     } catch (error) {
