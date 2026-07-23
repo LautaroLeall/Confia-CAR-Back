@@ -30,3 +30,30 @@ export const getMessagesByBooking = async (req, res) => {
         res.status(500).json({ message: 'Error interno del servidor al recuperar historial' });
     }
 };
+
+// @desc    Eliminar historial de mensajes de un chat (Admin)
+// @route   DELETE /api/messages/:bookingId
+// @access  Private
+export const deleteMessagesByBooking = async (req, res) => {
+    const { bookingId } = req.params;
+
+    try {
+        const booking = await Booking.findById(bookingId);
+
+        if (!booking) {
+            return res.status(404).json({ message: 'Reserva no encontrada' });
+        }
+
+        if (!req.user.isAdmin) {
+            return res.status(403).json({ message: 'No autorizado' });
+        }
+
+        // Eliminar los mensajes asociados a esta reserva
+        await Message.deleteMany({ booking: bookingId });
+
+        res.json({ message: 'Historial de chat eliminado correctamente' });
+    } catch (error) {
+        console.error('Error al eliminar chat:', error);
+        res.status(500).json({ message: 'Error al eliminar el chat' });
+    }
+};
