@@ -9,7 +9,7 @@ Provee la API REST completa, integración con **Mercado Pago**, WebSockets con *
 
 ## 🌐 Ver API Online
 
-[![ConfiaCAR Backend](https://img.shields.io/badge/ConfiaCAR%20Backend-2563eb?style=for-the-badge&logo=render&logoColor=white)](https://confia-car-api.onrender.com)
+[![ConfiaCAR Backend](https://img.shields.io/badge/ConfiaCAR%20Backend-2563eb?style=for-the-badge&logo=render&logoColor=white)](https://confia-car.onrender.com)
 
 ---
 
