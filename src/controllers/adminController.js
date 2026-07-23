@@ -10,7 +10,8 @@ export const getDashboardStats = async (req, res) => {
         const totalCars = await Car.countDocuments();
         const totalUsers = await User.countDocuments();
         const totalBookings = await Booking.countDocuments();
-        
+        const pendingBookings = await Booking.countDocuments({ status: 'pending_approval' });
+
         const paidBookings = await Booking.find({ status: { $in: ['paid', 'active', 'completed'] } });
         const totalRevenue = paidBookings.reduce((acc, booking) => acc + booking.totalPrice, 0);
 
@@ -24,6 +25,7 @@ export const getDashboardStats = async (req, res) => {
             totalCars,
             totalUsers,
             totalBookings,
+            pendingBookings,
             totalRevenue,
             recentBookings
         });
@@ -56,10 +58,10 @@ export const getAllBookings = async (req, res) => {
 // @route   PUT /api/admin/bookings/:id/confirm
 // @access  Private/Admin
 export const confirmBooking = async (req, res) => {
-    const { adminNote } = req.body;
+    const { adminNote } = req.body || {};
     try {
         const booking = await Booking.findById(req.params.id);
-        
+
         if (!booking) {
             return res.status(404).json({ message: 'Reserva no encontrada' });
         }
@@ -70,6 +72,7 @@ export const confirmBooking = async (req, res) => {
 
         booking.status = 'confirmed';
         booking.confirmedAt = new Date();
+        booking.chatOpen = true;
         if (adminNote) booking.adminNote = adminNote;
 
         await booking.save();
@@ -80,14 +83,40 @@ export const confirmBooking = async (req, res) => {
     }
 };
 
+// @desc    Marcar reserva como pagada manualmente (Admin)
+// @route   PUT /api/admin/bookings/:id/pay
+// @access  Private/Admin
+export const markAsPaid = async (req, res) => {
+    try {
+        const booking = await Booking.findById(req.params.id);
+
+        if (!booking) {
+            return res.status(404).json({ message: 'Reserva no encontrada' });
+        }
+
+        if (booking.status !== 'confirmed') {
+            return res.status(400).json({ message: 'Solo se pueden marcar como pagadas reservas que estén confirmadas' });
+        }
+
+        booking.status = 'paid';
+        booking.paymentStatus = 'approved';
+
+        await booking.save();
+        res.json({ message: 'Reserva marcada como pagada con éxito', booking });
+    } catch (error) {
+        console.error('Error al marcar reserva como pagada:', error);
+        res.status(500).json({ message: 'Error interno' });
+    }
+};
+
 // @desc    Cancelar una reserva (Admin)
 // @route   PUT /api/admin/bookings/:id/cancel
 // @access  Private/Admin
 export const cancelBooking = async (req, res) => {
-    const { adminNote } = req.body;
+    const { adminNote } = req.body || {};
     try {
         const booking = await Booking.findById(req.params.id);
-        
+
         if (!booking) {
             return res.status(404).json({ message: 'Reserva no encontrada' });
         }
@@ -110,26 +139,67 @@ export const cancelBooking = async (req, res) => {
     }
 };
 
-// @desc    Marcar reserva como completada manualmente
+// @desc    Marcar vehículo como retirado por el cliente (Admin)
+// @route   PUT /api/admin/bookings/:id/pickup
+// @access  Private/Admin
+export const pickupBooking = async (req, res) => {
+    try {
+        const booking = await Booking.findById(req.params.id);
+
+        if (!booking) {
+            return res.status(404).json({ message: 'Reserva no encontrada' });
+        }
+
+        if (booking.status !== 'paid' && booking.status !== 'confirmed') {
+            return res.status(400).json({ message: 'Solo se pueden retirar vehículos de reservas pagadas o confirmadas' });
+        }
+
+        // VALIDACIÓN DE FECHA: Solamente se puede marcar como retirado el día de la fecha de retiro o posterior
+        const today = new Date();
+        today.setHours(0, 0, 0, 0);
+
+        const pickupDate = new Date(booking.pickUpDate);
+        pickupDate.setHours(0, 0, 0, 0);
+
+        if (today < pickupDate) {
+            const formattedPickup = pickupDate.toLocaleDateString('es-AR');
+            return res.status(400).json({
+                message: `El vehículo solo puede marcarse como retirado a partir del día de retiro (${formattedPickup}).`
+            });
+        }
+
+        booking.status = 'picked_up';
+        booking.pickedUpAt = new Date();
+
+        await booking.save();
+        res.json({ message: 'Vehículo marcado como retirado por el cliente', booking });
+    } catch (error) {
+        console.error('Error al marcar retiro de auto:', error);
+        res.status(500).json({ message: 'Error interno' });
+    }
+};
+
+// @desc    Marcar reserva como completada manualmente (Devuelto)
 // @route   PUT /api/admin/bookings/:id/complete
 // @access  Private/Admin
 export const completeBooking = async (req, res) => {
     try {
         const booking = await Booking.findById(req.params.id);
-        
+
         if (!booking) {
             return res.status(404).json({ message: 'Reserva no encontrada' });
         }
 
-        if (booking.status !== 'paid' && booking.status !== 'active') {
-            return res.status(400).json({ message: 'Solo se pueden completar reservas pagadas o activas' });
+        if (!['picked_up', 'paid', 'active'].includes(booking.status)) {
+            return res.status(400).json({ message: 'Solo se pueden completar reservas retiradas o pagadas' });
         }
 
         booking.status = 'completed';
+        booking.returnedAt = new Date();
         booking.chatOpen = false;
 
         await booking.save();
-        res.json({ message: 'Reserva marcada como completada', booking });
+        res.json({ message: 'Vehículo devuelto. Reserva marcada como completada.', booking });
     } catch (error) {
         console.error('Error al completar reserva:', error);
         res.status(500).json({ message: 'Error interno' });
@@ -164,7 +234,7 @@ export const updateUserRole = async (req, res) => {
 
         user.isAdmin = !user.isAdmin;
         await user.save();
-        
+
         res.json({ message: 'Rol de usuario actualizado', isAdmin: user.isAdmin });
     } catch (error) {
         res.status(500).json({ message: 'Error interno' });
