@@ -40,6 +40,10 @@ app.get('/', (req, res) => {
     res.json({ status: 'ok', message: '¡El backend de Confia-CAR está funcionando! 🚗🚀' });
 });
 
+app.get('/api/status', (req, res) => {
+    res.json({ status: 'ok', message: '¡El backend de Confia-CAR está funcionando! 🚗🚀' });
+});
+
 app.get('/health', (req, res) => {
     res.json({ status: 'ok', message: '¡El backend de Confia-CAR está funcionando! 🚗🚀' });
 });
