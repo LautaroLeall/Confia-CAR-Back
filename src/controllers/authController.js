@@ -41,6 +41,7 @@ export const registerUser = async (req, res) => {
                 lastName: user.lastName,
                 email: user.email,
                 isAdmin: user.isAdmin,
+                avatar: user.avatar,
                 token
             });
         } else {
@@ -74,6 +75,7 @@ export const authUser = async (req, res) => {
                 lastName: user.lastName,
                 email: user.email,
                 isAdmin: user.isAdmin,
+                avatar: user.avatar,
                 token
             });
         } else {
