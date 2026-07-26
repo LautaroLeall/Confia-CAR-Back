@@ -6,6 +6,7 @@ let io;
 
 export const initSocket = (httpServer) => {
     const allowedOrigins = [
+        'https://confia-car-renta.vercel.app',
         process.env.FRONTEND_URL,
         'http://localhost:5173',
         'http://localhost:3000'
@@ -13,7 +14,17 @@ export const initSocket = (httpServer) => {
 
     io = new Server(httpServer, {
         cors: {
-            origin: allowedOrigins,
+            origin: (origin, callback) => {
+                if (!origin) return callback(null, true);
+                if (
+                    allowedOrigins.includes(origin) ||
+                    origin.endsWith('.vercel.app') ||
+                    origin.includes('localhost')
+                ) {
+                    return callback(null, true);
+                }
+                return callback(null, true);
+            },
             methods: ['GET', 'POST'],
             credentials: true
         }
