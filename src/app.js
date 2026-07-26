@@ -12,6 +12,7 @@ const app = express();
 
 // Orígenes permitidos (Vercel + localhost)
 const allowedOrigins = [
+    'https://confia-car-renta.vercel.app',
     process.env.FRONTEND_URL,
     'http://localhost:5173',
     'http://localhost:3000'
@@ -19,7 +20,17 @@ const allowedOrigins = [
 
 // Middlewares
 app.use(cors({
-    origin: allowedOrigins,
+    origin: (origin, callback) => {
+        if (!origin) return callback(null, true);
+        if (
+            allowedOrigins.includes(origin) ||
+            origin.endsWith('.vercel.app') ||
+            origin.includes('localhost')
+        ) {
+            return callback(null, true);
+        }
+        return callback(null, true);
+    },
     credentials: true,
     methods: ["GET", "POST", "PATCH", "PUT", "DELETE"],
     allowedHeaders: ["Content-Type", "Authorization"]
