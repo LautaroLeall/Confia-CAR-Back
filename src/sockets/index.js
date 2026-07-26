@@ -5,9 +5,15 @@ import { registerChatHandlers } from './chat.socket.js';
 let io;
 
 export const initSocket = (httpServer) => {
+    const allowedOrigins = [
+        process.env.FRONTEND_URL,
+        'http://localhost:5173',
+        'http://localhost:3000'
+    ].filter(Boolean);
+
     io = new Server(httpServer, {
         cors: {
-            origin: [process.env.FRONTEND_URL || 'http://localhost:5173'],
+            origin: allowedOrigins,
             methods: ['GET', 'POST'],
             credentials: true
         }
