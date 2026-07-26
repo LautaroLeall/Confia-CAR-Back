@@ -10,9 +10,16 @@ import adminRoutes from './routes/adminRoutes.js';
 
 const app = express();
 
+// Orígenes permitidos (Vercel + localhost)
+const allowedOrigins = [
+    process.env.FRONTEND_URL,
+    'http://localhost:5173',
+    'http://localhost:3000'
+].filter(Boolean);
+
 // Middlewares
 app.use(cors({
-    origin: [process.env.FRONTEND_URL || 'http://localhost:5173'],
+    origin: allowedOrigins,
     credentials: true,
     methods: ["GET", "POST", "PATCH", "PUT", "DELETE"],
     allowedHeaders: ["Content-Type", "Authorization"]
@@ -28,7 +35,11 @@ app.use('/api/bookings', bookingRoutes);
 app.use('/api/messages', messageRoutes);
 app.use('/api/admin', adminRoutes);
 
-// Health check
+// Health check (usado por GlobalLoader para detectar si el backend está listo)
+app.get('/', (req, res) => {
+    res.json({ status: 'ok', message: '¡El backend de Confia-CAR está funcionando! 🚗🚀' });
+});
+
 app.get('/health', (req, res) => {
     res.json({ status: 'ok', message: '¡El backend de Confia-CAR está funcionando! 🚗🚀' });
 });
